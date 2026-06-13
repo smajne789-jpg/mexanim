@@ -402,10 +402,10 @@ def reset_draft() -> None:
 
 def mini_caption() -> str:
     text = (
-        "🎁 <b>МИНИ-ИГРА НА 6 ИГРОКОВ ОТ ИЛЮШКИ</b>\n\n"
+        "🎁 <b>МИНИ-ИГРА НА 6 ИГРОКОВ ОТ МЕХАНИКА</b>\n\n"
         f"🏆 <b>ПРИЗ:</b> {escape(giveaway_title)}\n\n"
-        "👉 <b>УЧАСТВОВАТЬ ТУТ</b> @brazers_promo\n\n"
-        f"😀 <b>МИНИ-ИЛЮШКИ</b> ({len(participants)}/{MAX_PARTICIPANTS}):\n"
+        "👉 <b>УЧАСТВОВАТЬ ТУТ</b> @MEXANICK2\n\n"
+        f"😀 <b>МИНИ-МЕХАНИКА</b> ({len(participants)}/{MAX_PARTICIPANTS}):\n"
     )
 
     if not participants:
@@ -505,8 +505,8 @@ def reset_draft() -> None:
 
 def classic_giveaway_caption(prize: str, winners_count: int) -> str:
     return (
-        f"☘️ <b>{escape(prize)} ОТ ИЛЮШКИ</b>\n\n"
-        "👉 <b>УЧАСТВОВАТЬ ТУТ</b> @brazers_promo\n\n"
+        f"☘️ <b>{escape(prize)} ОТ МЕХАНИКА</b>\n\n"
+        "👉 <b>УЧАСТВОВАТЬ ТУТ</b> @MEXANICK2\n\n"
         f"🏆 Победителей: {winners_count}"
     )
 
@@ -692,7 +692,7 @@ async def finish_mini_giveaway() -> tuple[bool, str]:
     await bot.send_message(
         CHANNEL_ID,
         (
-            "🎁 <b>МИНИ-ИГРА ОТ ИЛЮШКИ ЗАВЕРШЕНА АДМИНОМ!</b>\n\n"
+            "🎁 <b>МИНИ-ИГРА ОТ МЕХАНИКА ЗАВЕРШЕНА!</b>\n\n"
             f"🏆 Победитель:\n{user_display(winner)}\n\n"
             f"💰 <b>ПРИЗ:</b> {escape(giveaway_title)}"
         ),
@@ -1482,8 +1482,8 @@ async def process_admin_text(message: types.Message):
             CHANNEL_ID,
             photo=GIVEAWAY_PHOTO,
             caption=(
-                f"☘️ <b>{escape(classic_prize)} ОТ ИЛЮШКИ</b>\n\n"
-                "👉 <b>УЧАСТВОВАТЬ ТУТ</b> @brazers_promo\n\n"
+                f"☘️ <b>{escape(classic_prize)} ОТ МЕХАНИКА<b>\n\n"
+                "👉 <b>УЧАСТВОВАТЬ ТУТ</b> @MEXANICK2\n\n"
                 f"🏆 Победителей: {classic_winners_count}"
             ),
             reply_markup=classic_keyboard(),
@@ -1692,7 +1692,7 @@ async def join(callback: types.CallbackQuery):
     await bot.send_message(
         CHANNEL_ID,
         (
-            "🎁 <b>МИНИ-ИГРА ОТ ИЛЮШКИ ЗАВЕРШЕНА!</b>\n\n"
+            "🎁 <b>МИНИ-ИГРА ОТ МЕХАНИКА ЗАВЕРШЕНА!</b>\n\n"
             f"🎲 Выпало число: <b>{dice_value}</b>\n\n"
             f"🏆 Победитель:\n{user_display(winner)}\n\n"
             f"💰 <b>ПРИЗ:</b> {escape(giveaway_title)}"
@@ -1727,8 +1727,8 @@ async def finish_classic(callback: types.CallbackQuery):
         chat_id=CHANNEL_ID,
         message_id=classic_message_id,
         caption=(
-            f"☘️ <b>{escape(classic_prize)} ОТ ИЛЮШКИ</b>\n\n"
-            "👉 <b>УЧАСТВОВАТЬ ТУТ</b> @brazers_promo\n\n"
+            f"☘️ <b>{escape(classic_prize)} ОТ МЕХАНИКА</b>\n\n"
+            "👉 <b>УЧАСТВОВАТЬ ТУТ</b> @MEXANICK2\n\n"
             f"✨ <b>Победители:</b>\n{winners_text}"
         ),
     )
