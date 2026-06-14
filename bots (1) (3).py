@@ -19,24 +19,11 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 REFERRAL_CHAT_ID = os.getenv("REFERRAL_CHAT_ID") or CHANNEL_ID
 
 MAX_PARTICIPANTS = 6
+GIVEAWAY_PHOTO = "AgACAgIAAxkBAANSaiOILtbjI9uXPclOjby3azTEWqQAAqodaxu6QRlJLp2T9fXeiH0BAAMCAAN5AAM7BA"
 REFERRAL_DATA_FILE = Path(__file__).with_name("referrals.json")
 REFERRAL_TOP_LIMIT = 10
-BRAND_USERNAME = "@MEXANICK2"
 BRAND_NAME = "МЕХАНИКА"
-MINI_PLAYERS_TITLE = "МИНИ-МЕХАНИКИ"
-PREMIUM_EMOJI_IDS = {
-    "gift": os.getenv("PREMIUM_EMOJI_GIFT_ID"),
-    "trophy": os.getenv("PREMIUM_EMOJI_TROPHY_ID"),
-    "pointer": os.getenv("PREMIUM_EMOJI_POINTER_ID"),
-    "players": os.getenv("PREMIUM_EMOJI_PLAYERS_ID"),
-    "clover": os.getenv("PREMIUM_EMOJI_CLOVER_ID"),
-    "swords": os.getenv("PREMIUM_EMOJI_SWORDS_ID"),
-    "dice": os.getenv("PREMIUM_EMOJI_DICE_ID"),
-    "sparkles": os.getenv("PREMIUM_EMOJI_SPARKLES_ID"),
-    "money": os.getenv("PREMIUM_EMOJI_MONEY_ID"),
-    "broken_heart": os.getenv("PREMIUM_EMOJI_BROKEN_HEART_ID"),
-    "handshake": os.getenv("PREMIUM_EMOJI_HANDSHAKE_ID"),
-}
+BRAND_USERNAME = "@MEXANICK2"
 
 if not TOKEN or not ADMIN_ID_RAW or not CHANNEL_ID:
     raise ValueError("Set BOT_TOKEN, ADMIN_ID, CHANNEL_ID environment variables")
@@ -59,11 +46,14 @@ classic_step = None
 classic_prize = ""
 classic_winners_count = 1
 classic_message_id = None
+classic_message_chat = None
 classic_participants = []
-classic_require_channel_subscription = False
-classic_extra_channel_target = None
-classic_extra_channel_link = None
+classic_post_target = str(CHANNEL_ID)
+classic_post_link = None
+classic_subscription_target = None
+classic_subscription_link = None
 last_classic_message_id = None
+last_classic_message_chat = None
 last_classic_prize = ""
 last_classic_participants = []
 last_classic_winners = []
@@ -74,6 +64,20 @@ duel_message_id = None
 duel_participants = []
 
 admin_input_state = None
+
+
+def current_brand_line() -> str:
+    return f"{BRAND_NAME} | {BRAND_USERNAME}"
+
+
+def classic_channel_target_label() -> str:
+    if classic_subscription_target:
+        return escape(str(classic_subscription_target))
+    return "не требуется"
+
+
+def classic_publish_target_label() -> str:
+    return escape(str(classic_post_target))
 
 
 def target_to_public_link(value: Optional[str]) -> Optional[str]:
@@ -367,12 +371,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
 def join_keyboard(active: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup()
     if active:
-        kb.add(
-            InlineKeyboardButton(
-                "Участвовать",
-                callback_data="join",
-            )
-        )
+        kb.add(InlineKeyboardButton("🎉 Участвовать", callback_data="join"))
     else:
         kb.add(InlineKeyboardButton("❌ Набор закрыт", callback_data="closed"))
     return kb
@@ -380,12 +379,21 @@ def join_keyboard(active: bool = True) -> InlineKeyboardMarkup:
 
 def classic_keyboard() -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup()
-    kb.add(
-        InlineKeyboardButton(
-            "Участвовать",
-            callback_data="classic_join",
-        )
-    )
+    kb.add(InlineKeyboardButton("🎉 Участвовать", callback_data="classic_join"))
+    return kb
+
+
+def classic_post_channel_keyboard() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(row_width=1)
+    kb.add(InlineKeyboardButton("📢 Использовать основной канал", callback_data="classic_post_default"))
+    kb.add(InlineKeyboardButton("❌ Отмена", callback_data="cancel"))
+    return kb
+
+
+def classic_subscription_setup_keyboard() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardMarkup(row_width=1)
+    kb.add(InlineKeyboardButton("📢 Добавить обязательную подписку", callback_data="classic_subscribe_add"))
+    kb.add(InlineKeyboardButton("⏭ Не нужно", callback_data="classic_subscribe_skip"))
     return kb
 
 
@@ -430,11 +438,10 @@ def reset_draft() -> None:
 
 def mini_caption() -> str:
     text = (
-        "🎮 <b>МИНИ-ИГРА ОТ МЕХАНИКА</b>\n\n"
-        f"🎁 <b>Приз:</b> {escape(giveaway_title)}\n"
-        f"📣 <b>Канал:</b> {BRAND_USERNAME}\n\n"
-        "👇 Нажми кнопку ниже, чтобы занять место в игре.\n\n"
-        f"👥 <b>{MINI_PLAYERS_TITLE}</b> ({len(participants)}/{MAX_PARTICIPANTS}):\n"
+        "🎁 <b>МИНИ-ИГРА НА 6 ИГРОКОВ ОТ МЕХАНИКА</b>\n\n"
+        f"🏆 <b>Приз:</b> {escape(giveaway_title)}\n"
+        f"👤 <b>Организатор:</b> {BRAND_USERNAME}\n\n"
+        f"🔢 <b>МИНИ-МЕХАНИКИ</b> ({len(participants)}/{MAX_PARTICIPANTS}):\n"
     )
 
     if not participants:
@@ -444,16 +451,6 @@ def mini_caption() -> str:
         text += f"{participant['number']}. {user_display(participant)}\n"
 
     return text
-
-
-def premium_emoji(name: str, fallback: str) -> str:
-    return fallback
-
-
-def premium_emoji_id(emoji_id: str, fallback: str) -> str:
-    return fallback
-
-
 def admin_keyboard() -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup(row_width=1)
     kb.add(
@@ -474,12 +471,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
 def duel_keyboard(active: bool = True) -> InlineKeyboardMarkup:
     kb = InlineKeyboardMarkup()
     if active:
-        kb.add(
-            InlineKeyboardButton(
-                "Войти в дуэль",
-                callback_data="duel_join",
-            )
-        )
+        kb.add(InlineKeyboardButton("⚔️ Войти в дуэль", callback_data="duel_join"))
     else:
         kb.add(InlineKeyboardButton("❌ Дуэль закрыта", callback_data="duel_closed"))
     return kb
@@ -534,34 +526,9 @@ def active_giveaways_keyboard() -> InlineKeyboardMarkup:
     return kb
 
 
-def classic_post_subscription_keyboard() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton("✅ Да", callback_data="classic_post_sub:yes"),
-        InlineKeyboardButton("⛔ Не нужно", callback_data="classic_post_sub:no"),
-    )
-    return kb
-
-
-def classic_extra_subscription_keyboard() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        InlineKeyboardButton("➕ Добавить канал", callback_data="classic_extra_sub:add"),
-        InlineKeyboardButton("⛔ Не нужно", callback_data="classic_extra_sub:skip"),
-    )
-    return kb
-
-
-def reset_classic_subscription_settings() -> None:
-    global classic_require_channel_subscription, classic_extra_channel_target, classic_extra_channel_link
-
-    classic_require_channel_subscription = False
-    classic_extra_channel_target = None
-    classic_extra_channel_link = None
-
-
 def reset_draft() -> None:
     global waiting_for_title, classic_step, classic_prize, classic_winners_count, duel_step, admin_input_state
+    global classic_post_target, classic_post_link, classic_subscription_target, classic_subscription_link
 
     waiting_for_title = False
     classic_step = None
@@ -569,77 +536,45 @@ def reset_draft() -> None:
     classic_winners_count = 1
     duel_step = None
     admin_input_state = None
-    reset_classic_subscription_settings()
-
-
-def classic_extra_channel_name() -> str:
-    if classic_extra_channel_target:
-        target = str(classic_extra_channel_target)
-        if target.startswith("@"):
-            return target
-
-    if classic_extra_channel_link:
-        return classic_extra_channel_link
-
-    return "дополнительный канал"
-
-
-def classic_subscription_note() -> str:
-    lines = []
-    if classic_require_channel_subscription:
-        lines.append("📌 Для участия нужна подписка на канал, где выходит розыгрыш.")
-    if classic_extra_channel_target:
-        lines.append(f"📌 Дополнительно нужна подписка на {escape(classic_extra_channel_name())}.")
-
-    if not lines:
-        return ""
-
-    return "\n\n" + "\n".join(lines)
-
-
-def classic_subscription_keyboard() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardMarkup(row_width=1)
-
-    if classic_require_channel_subscription:
-        channel_link = target_to_public_link(CHANNEL_ID)
-        if channel_link:
-            kb.add(InlineKeyboardButton("📢 Канал с розыгрышем", url=channel_link))
-
-    extra_link = classic_extra_channel_link or target_to_public_link(classic_extra_channel_target)
-    if classic_extra_channel_target and extra_link:
-        kb.add(InlineKeyboardButton("➕ Дополнительный канал", url=extra_link))
-
-    kb.add(InlineKeyboardButton("✅ Проверить и участвовать", callback_data="classic_join"))
-    return kb
+    classic_post_target = str(CHANNEL_ID)
+    classic_post_link = target_to_public_link(CHANNEL_ID)
+    classic_subscription_target = None
+    classic_subscription_link = None
 
 
 def classic_giveaway_caption(prize: str, winners_count: int) -> str:
-    return (
-        "🎉 <b>РОЗЫГРЫШ ОТ МЕХАНИКА</b>\n\n"
-        f"🎁 <b>Приз:</b> {escape(prize)}\n"
-        f"🏆 <b>Победителей:</b> {winners_count}\n"
-        f"📣 <b>Канал:</b> {BRAND_USERNAME}"
-        f"{classic_subscription_note()}\n\n"
-        "👇 Нажми кнопку ниже, чтобы участвовать."
-    )
+    lines = [
+        "🎁 <b>ОБЫЧНЫЙ РОЗЫГРЫШ ОТ МЕХАНИКА</b>",
+        "",
+        f"🎉 <b>Приз:</b> {escape(prize)}",
+        f"🏆 <b>Победителей:</b> {winners_count}",
+        f"👤 <b>Организатор:</b> {BRAND_USERNAME}",
+    ]
+    if classic_subscription_target:
+        lines.append(f"📢 <b>Обязательная подписка:</b> {classic_channel_target_label()}")
+    lines.extend(["", "Нажми кнопку ниже, чтобы участвовать."])
+    return "\n".join(lines)
 
 
 def classic_result_caption(prize: str, winners: list[dict]) -> str:
     winners_text = "\n".join(user_display(winner) for winner in winners)
-    return (
-        "🎉 <b>РОЗЫГРЫШ ОТ МЕХАНИКА ЗАВЕРШЕН</b>\n\n"
-        f"🎁 <b>Приз:</b> {escape(prize)}\n"
-        f"📣 <b>Канал:</b> {BRAND_USERNAME}\n\n"
-        f"🏆 <b>Победители:</b>\n{winners_text}"
+    return "\n".join(
+        [
+            "🎁 <b>ОБЫЧНЫЙ РОЗЫГРЫШ ОТ МЕХАНИКА ЗАВЕРШЕН</b>",
+            "",
+            f"🎉 <b>Приз:</b> {escape(prize)}",
+            f"🏆 <b>Победители:</b>\n{winners_text}",
+            f"👤 <b>Организатор:</b> {BRAND_USERNAME}",
+        ]
     )
 
 
 def duel_caption() -> str:
     text = (
         "⚔️ <b>ДУЭЛЬ ОТ МЕХАНИКА</b>\n\n"
-        f"🎁 <b>Приз:</b> {escape(duel_prize)}\n"
-        f"📣 <b>Канал:</b> {BRAND_USERNAME}\n\n"
-        "🎲 Как только соберутся 2 участника, бот сам бросит кубики и определит победителя.\n\n"
+        f"🎁 <b>Приз:</b> {escape(duel_prize)}\n\n"
+        "🎲 Когда соберутся 2 игрока, бот автоматически бросит кубики.\n"
+        "🏅 Побеждает тот, у кого выпадет большее число.\n\n"
         f"👥 <b>Участники</b> ({len(duel_participants)}/2):\n"
     )
 
@@ -655,8 +590,8 @@ def duel_caption() -> str:
 def duel_result_caption(winner: dict, loser: dict, round_lines: list[str]) -> str:
     return (
         "⚔️ <b>ДУЭЛЬ ОТ МЕХАНИКА ЗАВЕРШЕНА</b>\n\n"
-        f"🏆 Победитель: {user_display(winner)}\n"
-        f"💔 Не повезло: {user_display(loser)}\n\n"
+        f"🏆 <b>Победитель:</b> {user_display(winner)}\n"
+        f"💔 <b>Второй игрок:</b> {user_display(loser)}\n\n"
         + "\n".join(round_lines)
         + f"\n\n🎁 <b>Приз:</b> {escape(duel_prize)}"
     )
@@ -667,18 +602,20 @@ def copy_users(users: list[dict]) -> list[dict]:
 
 
 def reset_last_classic_result() -> None:
-    global last_classic_message_id, last_classic_prize, last_classic_participants, last_classic_winners
+    global last_classic_message_id, last_classic_message_chat, last_classic_prize, last_classic_participants, last_classic_winners
 
     last_classic_message_id = None
+    last_classic_message_chat = None
     last_classic_prize = ""
     last_classic_participants = []
     last_classic_winners = []
 
 
-def save_last_classic_result(source_message_id: int, prize: str, participants_list: list[dict], winners: list[dict]) -> None:
-    global last_classic_message_id, last_classic_prize, last_classic_participants, last_classic_winners
+def save_last_classic_result(source_message_id: int, source_chat_id, prize: str, participants_list: list[dict], winners: list[dict]) -> None:
+    global last_classic_message_id, last_classic_message_chat, last_classic_prize, last_classic_participants, last_classic_winners
 
     last_classic_message_id = source_message_id
+    last_classic_message_chat = source_chat_id
     last_classic_prize = prize
     last_classic_participants = copy_users(participants_list)
     last_classic_winners = copy_users(winners)
@@ -694,6 +631,74 @@ async def update_duel_message() -> None:
         caption=duel_caption(),
         reply_markup=duel_keyboard(len(duel_participants) < 2),
     )
+
+
+async def publish_classic_giveaway(admin_chat_id: int) -> None:
+    global classic_message_id, classic_message_chat, classic_step, classic_participants
+
+    reset_last_classic_result()
+    classic_participants = []
+    target_chat_id = chat_id_for_api(classic_post_target)
+    msg = await bot.send_photo(
+        chat_id=target_chat_id,
+        photo=GIVEAWAY_PHOTO,
+        caption=classic_giveaway_caption(classic_prize, classic_winners_count),
+        reply_markup=classic_keyboard(),
+    )
+    classic_message_id = msg.message_id
+    classic_message_chat = target_chat_id
+    classic_step = None
+
+    subscription_text = classic_channel_target_label()
+    await bot.send_message(
+        admin_chat_id,
+        (
+            "✅ Обычный розыгрыш создан.\n"
+            f"Канал публикации: <code>{classic_publish_target_label()}</code>\n"
+            f"Обязательная подписка: <code>{subscription_text}</code>"
+        ),
+        reply_markup=finish_keyboard(),
+    )
+
+
+async def get_missing_classic_subscription(user_id: int) -> list[str]:
+    if not classic_subscription_target:
+        return []
+
+    try:
+        member = await bot.get_chat_member(chat_id_for_api(classic_subscription_target), user_id)
+    except Exception:
+        logging.exception("Could not check classic subscription for %s in %s", user_id, classic_subscription_target)
+        return ["обязательный канал"]
+
+    status = getattr(member, "status", None)
+    if status in {"left", "kicked"}:
+        return ["обязательный канал"]
+    return []
+
+
+async def ensure_classic_access(callback: types.CallbackQuery) -> bool:
+    if not classic_subscription_target:
+        return await ensure_callback_access(callback)
+
+    missing = await get_missing_classic_subscription(callback.from_user.id)
+    if not missing:
+        return True
+
+    await callback.answer("Сначала подпишись на обязательный канал розыгрыша, потом нажми кнопку еще раз.", show_alert=True)
+    if classic_subscription_link:
+        try:
+            kb = InlineKeyboardMarkup().add(
+                InlineKeyboardButton("📢 Подписаться", url=classic_subscription_link)
+            )
+            await bot.send_message(
+                callback.from_user.id,
+                "Для участия в этом розыгрыше нужна подписка на обязательный канал.",
+                reply_markup=kb,
+            )
+        except Exception:
+            logging.info("Could not send classic subscription prompt to %s", callback.from_user.id)
+    return False
 
 
 async def delete_duel_giveaway() -> None:
@@ -828,80 +833,20 @@ async def finish_mini_giveaway() -> tuple[bool, str]:
 
 
 async def delete_classic_giveaway() -> None:
-    global classic_message_id, classic_participants, classic_prize, classic_winners_count, classic_step
+    global classic_message_id, classic_message_chat, classic_participants, classic_prize, classic_winners_count, classic_step
 
     if classic_message_id:
         try:
-            await bot.delete_message(chat_id=CHANNEL_ID, message_id=classic_message_id)
+            await bot.delete_message(chat_id=classic_message_chat or CHANNEL_ID, message_id=classic_message_id)
         except Exception:
             logging.exception("Could not delete classic giveaway message")
 
     classic_message_id = None
+    classic_message_chat = None
     classic_participants = []
     classic_prize = ""
     classic_winners_count = 1
     classic_step = None
-    reset_classic_subscription_settings()
-
-
-async def publish_classic_giveaway(admin_chat_id: int) -> None:
-    global classic_message_id, classic_participants, classic_step
-
-    reset_last_classic_result()
-    classic_participants = []
-
-    msg = await bot.send_photo(
-        CHANNEL_ID,
-        photo=GIVEAWAY_PHOTO,
-        caption=classic_giveaway_caption(classic_prize, classic_winners_count),
-        reply_markup=classic_keyboard(),
-    )
-
-    classic_message_id = msg.message_id
-    classic_step = None
-
-    await bot.send_message(
-        admin_chat_id,
-        "✅ Обычный розыгрыш создан.",
-        reply_markup=finish_keyboard(),
-    )
-
-
-async def get_missing_classic_subscriptions(user_id: int) -> list[str]:
-    missing = []
-    checks = []
-
-    if classic_require_channel_subscription:
-        checks.append(("канал с розыгрышем", CHANNEL_ID))
-
-    if classic_extra_channel_target:
-        checks.append((classic_extra_channel_name(), classic_extra_channel_target))
-
-    for label, target in checks:
-        try:
-            member = await bot.get_chat_member(chat_id_for_api(target), user_id)
-        except Exception:
-            logging.exception("Could not check classic subscription for %s in %s", user_id, target)
-            missing.append(label)
-            continue
-
-        status = getattr(member, "status", None)
-        if status in {"left", "kicked"}:
-            missing.append(label)
-
-    return missing
-
-
-async def send_classic_subscription_prompt(user: types.User, missing: list[str]) -> None:
-    missing_text = "\n".join(f"• {escape(item)}" for item in missing)
-    await bot.send_message(
-        user.id,
-        (
-            "Для участия в розыгрыше подпишись на обязательные каналы, затем нажми кнопку проверки.\n\n"
-            f"{missing_text}"
-        ),
-        reply_markup=classic_subscription_keyboard(),
-    )
 
 
 def chat_id_for_api(value: Optional[str]):
@@ -1526,47 +1471,68 @@ async def classic_create(callback: types.CallbackQuery):
 
     reset_draft()
     classic_step = "prize"
-    await callback.message.answer(
-        "✏️ Введите приз обычного розыгрыша.\n"
-        "Пост бот соберет сам: с понятным текстом и кнопкой участия."
-    )
+    await callback.message.answer("✏️ Введите приз для обычного розыгрыша:")
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data and c.data.startswith("classic_post_sub:"))
-async def classic_post_sub(callback: types.CallbackQuery):
-    global classic_require_channel_subscription
+@dp.callback_query_handler(lambda c: c.data == "classic_post_default")
+async def classic_post_default(callback: types.CallbackQuery):
+    global classic_post_target, classic_post_link, classic_step
 
     if not is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
 
-    classic_require_channel_subscription = callback.data.endswith(":yes")
+    if classic_step != "post_channel":
+        await callback.answer("Сейчас этот шаг неактивен", show_alert=True)
+        return
+
+    classic_post_target = str(CHANNEL_ID)
+    classic_post_link = target_to_public_link(CHANNEL_ID)
+    classic_step = "subscription_choice"
     await callback.message.answer(
-        "➕ Добавить еще один обязательный канал для подписки?",
-        reply_markup=classic_extra_subscription_keyboard(),
+        "Нужна ли обязательная подписка на отдельный канал для участия?",
+        reply_markup=classic_subscription_setup_keyboard(),
     )
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data and c.data.startswith("classic_extra_sub:"))
-async def classic_extra_sub(callback: types.CallbackQuery):
+@dp.callback_query_handler(lambda c: c.data == "classic_subscribe_add")
+async def classic_subscribe_add(callback: types.CallbackQuery):
     global classic_step
 
     if not is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
         return
 
-    if callback.data.endswith(":add"):
-        classic_step = "extra_channel"
-        await callback.message.answer(
-            "✏️ Пришлите @username, ссылку https://t.me/... или id дополнительного канала.\n"
-            "Если нужна кнопка для перехода, лучше отправить @username или ссылку."
-        )
-    else:
-        await publish_classic_giveaway(callback.message.chat.id)
+    if classic_step != "subscription_choice":
+        await callback.answer("Сейчас этот шаг неактивен", show_alert=True)
+        return
 
+    classic_step = "subscription_channel"
+    await callback.message.answer(
+        "📢 Пришлите @username или ссылку https://t.me/... на канал обязательной подписки.",
+        reply_markup=classic_subscription_setup_keyboard(),
+    )
     await callback.answer()
+
+
+@dp.callback_query_handler(lambda c: c.data == "classic_subscribe_skip")
+async def classic_subscribe_skip(callback: types.CallbackQuery):
+    global classic_subscription_target, classic_subscription_link
+
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+
+    if classic_step not in {"subscription_choice", "subscription_channel"}:
+        await callback.answer("Сейчас этот шаг неактивен", show_alert=True)
+        return
+
+    classic_subscription_target = None
+    classic_subscription_link = None
+    await publish_classic_giveaway(callback.message.chat.id)
+    await callback.answer("Подписка отключена")
 
 
 @dp.callback_query_handler(lambda c: c.data == "duel_create")
@@ -1619,7 +1585,7 @@ async def process_admin_text(message: types.Message):
     global admin_input_state, classic_message_id, classic_participants, classic_prize, classic_step
     global classic_winners_count, giveaway_title, message_id, mini_finished
     global participants, waiting_for_title, duel_step, duel_prize, duel_message_id, duel_participants
-    global classic_extra_channel_target, classic_extra_channel_link
+    global classic_post_target, classic_post_link, classic_subscription_target, classic_subscription_link
 
     settings = access_settings()
 
@@ -1702,21 +1668,40 @@ async def process_admin_text(message: types.Message):
             await message.answer("Победителей должно быть минимум 1.")
             return
 
-        classic_step = "post_subscription"
+        classic_step = "post_channel"
         await message.answer(
-            "📌 Нужна обязательная подписка на канал, где будет опубликован розыгрыш?",
-            reply_markup=classic_post_subscription_keyboard(),
+            "📢 Куда опубликовать обычный розыгрыш?\n"
+            "Пришлите @username, ссылку https://t.me/... или id канала.\n"
+            "Если нужен основной канал из настроек, нажмите кнопку ниже.",
+            reply_markup=classic_post_channel_keyboard(),
         )
         return
 
-    if classic_step == "extra_channel":
-        target = parse_chat_target(message.text or "")
+    if classic_step == "post_channel":
+        raw_target = (message.text or "").strip()
+        target = parse_chat_target(raw_target)
         if not target:
             await message.answer("Не смог понять канал. Пришлите @username, ссылку https://t.me/... или id.")
             return
 
-        classic_extra_channel_target = target
-        classic_extra_channel_link = normalize_join_link(message.text or "") or target_to_public_link(target)
+        classic_post_target = target
+        classic_post_link = target_to_public_link(target) or normalize_join_link(raw_target)
+        classic_step = "subscription_choice"
+        await message.answer(
+            "Нужна ли обязательная подписка на отдельный канал для участия?",
+            reply_markup=classic_subscription_setup_keyboard(),
+        )
+        return
+
+    if classic_step == "subscription_channel":
+        raw_target = (message.text or "").strip()
+        target = parse_chat_target(raw_target)
+        if not target:
+            await message.answer("Не смог понять канал. Пришлите @username или ссылку https://t.me/...")
+            return
+
+        classic_subscription_target = target
+        classic_subscription_link = target_to_public_link(target) or normalize_join_link(raw_target)
         await publish_classic_giveaway(message.chat.id)
         return
 
@@ -1779,18 +1764,10 @@ async def classic_join(callback: types.CallbackQuery):
         await callback.answer("Розыгрыш еще не создан")
         return
 
-    if not await ensure_callback_access(callback):
+    if not await ensure_classic_access(callback):
         return
 
     user = callback.from_user
-    missing = await get_missing_classic_subscriptions(user.id)
-    if missing:
-        await callback.answer("Сначала подпишись на обязательные каналы, потом нажми снова", show_alert=True)
-        try:
-            await send_classic_subscription_prompt(user, missing)
-        except Exception:
-            logging.info("Could not send classic subscription prompt to %s", user.id)
-        return
 
     if user.id in [p["id"] for p in classic_participants]:
         await callback.answer("Ты уже участвуешь")
@@ -1908,7 +1885,7 @@ async def join(callback: types.CallbackQuery):
     mini_finished = True
     await bot.send_message(
         CHANNEL_ID,
-        "🎲 Все 6 мест заняты. Определяем победителя...",
+        "🎲 Набрано 6 МИНИ-МЕХАНИКОВ! Определяем победителя...",
     )
 
     dice_msg = await bot.send_dice(CHANNEL_ID)
@@ -1932,7 +1909,7 @@ async def join(callback: types.CallbackQuery):
 
 @dp.callback_query_handler(lambda c: c.data == "finish_classic")
 async def finish_classic(callback: types.CallbackQuery):
-    global classic_message_id, classic_participants, classic_prize
+    global classic_message_id, classic_message_chat, classic_participants
 
     if not is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
@@ -1953,15 +1930,19 @@ async def finish_classic(callback: types.CallbackQuery):
     winners_text = "\n".join(user_display(winner) for winner in winners)
 
     await bot.edit_message_caption(
-        chat_id=CHANNEL_ID,
+        chat_id=classic_message_chat or CHANNEL_ID,
         message_id=classic_message_id,
-        caption=classic_result_caption(classic_prize, winners),
+        caption=(
+            "🎁 <b>ОБЫЧНЫЙ РОЗЫГРЫШ ОТ МЕХАНИКА ЗАВЕРШЕН</b>\n\n"
+            f"🎉 <b>Приз:</b> {escape(classic_prize)}\n"
+            f"🏆 <b>Победители:</b>\n{winners_text}\n"
+            f"👤 <b>Организатор:</b> {BRAND_USERNAME}"
+        ),
     )
 
     classic_message_id = None
+    classic_message_chat = None
     classic_participants = []
-    classic_prize = ""
-    reset_classic_subscription_settings()
     await callback.answer("Розыгрыш завершен")
     await callback.message.answer("✅ Обычный розыгрыш завершен.", reply_markup=admin_keyboard())
 
@@ -2052,7 +2033,7 @@ async def classic_members_v2(callback: types.CallbackQuery):
 
 @dp.callback_query_handler(lambda c: c.data == "finish_classic_v2")
 async def finish_classic_v2(callback: types.CallbackQuery):
-    global classic_message_id, classic_participants, classic_prize
+    global classic_message_id, classic_message_chat, classic_participants, classic_prize
 
     if not is_admin(callback.from_user.id):
         await callback.answer("Нет доступа", show_alert=True)
@@ -2071,20 +2052,21 @@ async def finish_classic_v2(callback: types.CallbackQuery):
         min(classic_winners_count, len(classic_participants)),
     )
     current_message_id = classic_message_id
+    current_chat_id = classic_message_chat or CHANNEL_ID
     current_prize = classic_prize
 
     await bot.edit_message_caption(
-        chat_id=CHANNEL_ID,
+        chat_id=current_chat_id,
         message_id=current_message_id,
         caption=classic_result_caption(current_prize, winners),
         reply_markup=None,
     )
 
-    save_last_classic_result(current_message_id, current_prize, classic_participants, winners)
+    save_last_classic_result(current_message_id, current_chat_id, current_prize, classic_participants, winners)
     classic_message_id = None
+    classic_message_chat = None
     classic_participants = []
     classic_prize = ""
-    reset_classic_subscription_settings()
 
     await callback.answer("Розыгрыш завершен")
     await callback.message.answer("✅ Обычный розыгрыш завершен. Рерол доступен из админ-панели.", reply_markup=admin_keyboard())
@@ -2162,7 +2144,7 @@ async def classic_reroll_pick(callback: types.CallbackQuery):
     last_classic_winners[winner_index] = new_winner
 
     await bot.edit_message_caption(
-        chat_id=CHANNEL_ID,
+        chat_id=last_classic_message_chat or CHANNEL_ID,
         message_id=last_classic_message_id,
         caption=classic_result_caption(last_classic_prize, last_classic_winners),
         reply_markup=None,
